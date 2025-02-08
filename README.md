@@ -2,6 +2,17 @@
 
 A powerful research assistant that helps researchers organize and create professional research papers. This tool assists in searching academic papers, generating literature reviews, and organizing research content in a structured format.
 
+## Screenshots
+
+### Home Page
+![Home Page](screenshots/home.png)
+
+### Literature Review
+![Literature Review](screenshots/literature_review.png)
+
+### Search Results
+![Search Results](screenshots/search_results.png)
+
 ## Features
 
 - 🔍 **Smart Paper Search**: Search and fetch academic papers from various sources
