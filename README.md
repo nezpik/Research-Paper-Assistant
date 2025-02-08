@@ -51,7 +51,27 @@ A powerful web application that helps researchers organize and create profession
    pip install -r requirements.txt
    ```
 
-4. **Set Up Environment Variables**
+4. **Choose Your AI Backend**
+   This application supports two AI backends:
+   
+   a) **Google Gemini (Default)**
+   - Get your API keys from [Google AI Studio](https://makersuite.google.com/app/apikey)
+   - Use `app.py`
+   - Configure in `.env`:
+     ```bash
+     GEMINI_API_KEY=your-gemini-api-key
+     GEMINI_API_KEY_2=your-gemini-api-key-2
+     ```
+
+   b) **DeepSeek V3**
+   - Get your API key from [DeepSeek Platform](https://platform.deepseek.com/api_keys)
+   - Use `app_deepseek.py`
+   - Configure in `.env`:
+     ```bash
+     DEEPSEEK_API_KEY=your-deepseek-api-key
+     ```
+
+5. **Set Up Environment Variables**
    Create a new file named `.env` in the project root directory with the following content:
    ```bash
    # Required for session management
@@ -60,18 +80,17 @@ A powerful web application that helps researchers organize and create profession
    # Database configuration
    DATABASE=papers.db
 
-   # API Keys (required for AI features)
+   # Choose ONE of these API configurations:
+   
+   # Option 1: Gemini API Keys (for app.py)
    GEMINI_API_KEY=your-gemini-api-key
    GEMINI_API_KEY_2=your-gemini-api-key-2
+   
+   # Option 2: DeepSeek API Key (for app_deepseek.py)
+   DEEPSEEK_API_KEY=your-deepseek-api-key
    ```
 
-   To get your Gemini API keys:
-   1. Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
-   2. Sign in with your Google account
-   3. Click "Create API Key"
-   4. Copy the keys and paste them in your `.env` file
-
-5. **Initialize the Database**
+6. **Initialize the Database**
    ```bash
    python init_db.py
    ```
@@ -79,8 +98,15 @@ A powerful web application that helps researchers organize and create profession
 ### Running the Application
 
 1. **Start the Server**
+   
+   For Gemini version (default):
    ```bash
    python app.py
+   ```
+   
+   For DeepSeek version:
+   ```bash
+   python app_deepseek.py
    ```
 
 2. **Access the Application**
@@ -134,7 +160,9 @@ A powerful web application that helps researchers organize and create profession
 
 2. **Missing API Keys**
    - Verify your `.env` file contains valid API keys
-   - Check the Google AI Studio dashboard for key status
+   - Check the respective API dashboard for key status
+   - For Gemini: Visit Google AI Studio
+   - For DeepSeek: Visit DeepSeek Platform
 
 3. **Dependencies Issues**
    ```bash
@@ -154,6 +182,7 @@ If you encounter any issues:
    - Steps to reproduce
    - Your Python version
    - Your operating system
+   - Which AI backend you're using (Gemini or DeepSeek)
 
 ## Contributing
 
