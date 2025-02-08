@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Search Results for "{{ query }}"</h1>
+<ul>
+  {% for result in results %}
+  <li>
+    <strong>{{ result.title }}</strong> - <a href="{{ result.link }}" target="_blank">{{ result.link }}</a><br>
+    Source: {{ result.source }}<br>
+    <form action="{{ url_for('add_paper') }}" method="post" style="display:inline;">
+      <input type="hidden" name="title" value="{{ result.title }}">
+      <input type="hidden" name="link" value="{{ result.link }}">
+      <input type="hidden" name="source" value="{{ result.source }}">
+      <button type="submit">Add Paper</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+<a href="{{ url_for('index') }}">Back to Home</a>
+{% endblock %}

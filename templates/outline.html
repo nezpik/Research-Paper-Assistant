@@ -1,0 +1,6 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Outline for Section: {{ section }}</h1>
+<p>{{ outline }}</p>
+<a href="{{ url_for('index') }}">Back to Home</a>
+{% endblock %}

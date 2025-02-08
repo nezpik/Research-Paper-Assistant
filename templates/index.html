@@ -1,0 +1,351 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container">
+    <div class="app-header">
+        <h1>Research Organizer</h1>
+        <div class="date-nav">
+            <span class="current-date">{{ current_date }}</span>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="search-section">
+        <form method="GET" action="{{ url_for('search') }}" class="search-form">
+            <div class="search-container">
+                <div class="input-group">
+                    <input type="text" 
+                           name="query" 
+                           placeholder="Search for papers..." 
+                           value="{{ request.args.get('query', '') }}" 
+                           required
+                           class="search-input">
+                    <select name="source" class="source-select">
+                        <option value="all" {% if request.args.get('source') == 'all' %}selected{% endif %}>All Sources</option>
+                        <option value="arxiv" {% if request.args.get('source') == 'arxiv' %}selected{% endif %}>arXiv</option>
+                    </select>
+                    <button type="submit" class="search-button">Search</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div id="loading-indicator" class="loading-indicator">
+        <div class="spinner"></div>
+        <span>Searching...</span>
+    </div>
+
+    {% if papers %}
+    <div class="results-section">
+        <div class="results-header">
+            <h2>Search Results</h2>
+            <div class="selection-controls">
+                <select id="section-select" class="section-select">
+                    <option value="">Select Section</option>
+                    <option value="Introduction">Introduction</option>
+                    <option value="Literature Review">Literature Review</option>
+                    <option value="Methodology">Methodology</option>
+                    <option value="Results">Results</option>
+                    <option value="Discussion">Discussion</option>
+                    <option value="Conclusion">Conclusion</option>
+                </select>
+                <div class="button-group">
+                    <button id="select-all" class="control-button secondary">Select All</button>
+                    <button id="clear-selection" class="control-button secondary">Clear</button>
+                    <button id="add-selected" class="control-button primary" disabled>Add to Paper</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="results-container">
+            {% for paper in papers %}
+            <div class="paper-card" data-paper-id="{{ loop.index }}">
+                <div class="paper-checkbox-container">
+                    <input type="checkbox" class="paper-checkbox" id="paper-{{ loop.index }}">
+                    <label for="paper-{{ loop.index }}" class="checkbox-label"></label>
+                </div>
+                <div class="paper-content">
+                    <h3 class="paper-title">{{ paper.title }}</h3>
+                    <div class="paper-meta">
+                        {% if paper.authors %}
+                            <p class="paper-authors">{{ paper.authors }}</p>
+                        {% endif %}
+                        <div class="meta-details">
+                            <span class="paper-source">{{ paper.source }}</span>
+                            {% if paper.year %}
+                                <span class="paper-year">{{ paper.year }}</span>
+                            {% endif %}
+                            {% if paper.citations %}
+                                <span class="paper-citations">{{ paper.citations }} citations</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if paper.abstract %}
+                        <div class="paper-abstract">
+                            <p>{{ paper.abstract }}</p>
+                            <button class="show-more">Show more</button>
+                        </div>
+                    {% endif %}
+                    {% if paper.url %}
+                        <a href="{{ paper.url }}" target="_blank" class="paper-link">View Paper</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% elif request.args.get('query') %}
+        <div class="no-results">
+            <div class="no-results-icon">📚</div>
+            <p>No papers found matching your search criteria.</p>
+            <p class="suggestion">Try adjusting your search terms or selecting a different source.</p>
+        </div>
+    {% endif %}
+
+    <div class="research-paper-section">
+        <div class="paper-container">
+            <div class="paper-header">
+                <h1 class="paper-title">Research Paper Title</h1>
+                <div class="paper-authors-info">
+                    <p class="author-name">Author Name</p>
+                    <p class="author-affiliation">Institution/University</p>
+                    <p class="paper-date">{{ current_date }}</p>
+                </div>
+            </div>
+
+            <div class="paper-abstract-section">
+                <h2>Abstract</h2>
+                <div class="paper-abstract-content">
+                    Your research paper abstract will appear here.
+                </div>
+            </div>
+
+            <div class="paper-content" id="paper-content">
+                <!-- Sections will be added here -->
+            </div>
+
+            <div class="paper-references">
+                <h2>References</h2>
+                <div id="references-content">
+                    <!-- References will be added here -->
+                </div>
+            </div>
+        </div>
+
+        <div class="paper-controls">
+            <button class="paper-control-button" id="edit-title">Edit Title</button>
+            <button class="paper-control-button" id="edit-authors">Edit Authors</button>
+            <button class="paper-control-button" id="edit-abstract">Edit Abstract</button>
+            <button class="paper-control-button" id="download-pdf">Download PDF</button>
+        </div>
+
+        <div id="loading-indicator-paper" class="loading-indicator">
+            <div class="spinner"></div>
+            <span>Adding to paper...</span>
+        </div>
+        <div id="error-message-paper" class="error-message"></div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selectedPapers = new Set();
+    
+    // Handle checkbox changes
+    document.querySelectorAll('.paper-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const paperCard = this.closest('.paper-card');
+            const paperId = paperCard.dataset.paperId;
+            
+            if (this.checked) {
+                selectedPapers.add(paperId);
+                paperCard.classList.add('selected');
+            } else {
+                selectedPapers.delete(paperId);
+                paperCard.classList.remove('selected');
+            }
+            
+            // Update add button state
+            const addButton = document.getElementById('add-selected');
+            const sectionSelect = document.getElementById('section-select');
+            addButton.disabled = document.querySelectorAll('.paper-checkbox:checked').length === 0 || !sectionSelect.value;
+        });
+    });
+    
+    // Select All button
+    document.getElementById('select-all').addEventListener('click', function() {
+        document.querySelectorAll('.paper-checkbox').forEach(checkbox => {
+            checkbox.checked = true;
+            const paperCard = checkbox.closest('.paper-card');
+            paperCard.classList.add('selected');
+        });
+        updateAddButtonState();
+    });
+    
+    // Clear Selection button
+    document.getElementById('clear-selection').addEventListener('click', function() {
+        document.querySelectorAll('.paper-checkbox').forEach(checkbox => {
+            checkbox.checked = false;
+            const paperCard = checkbox.closest('.paper-card');
+            paperCard.classList.remove('selected');
+        });
+        updateAddButtonState();
+    });
+
+    // Update add button state when section changes
+    document.getElementById('section-select').addEventListener('change', updateAddButtonState);
+
+    function updateAddButtonState() {
+        const addButton = document.getElementById('add-selected');
+        const sectionSelect = document.getElementById('section-select');
+        const hasSelectedPapers = document.querySelectorAll('.paper-checkbox:checked').length > 0;
+        addButton.disabled = !hasSelectedPapers || !sectionSelect.value;
+    }
+
+    // Initial update of add button state
+    updateAddButtonState();
+
+    // Add Selected button
+    document.getElementById('add-selected').addEventListener('click', function() {
+        const section = document.getElementById('section-select').value;
+        if (!section) {
+            alert('Please select a section first');
+            return;
+        }
+        
+        const selectedPapersList = [];
+        document.querySelectorAll('.paper-card').forEach(card => {
+            if (card.querySelector('.paper-checkbox').checked) {
+                selectedPapersList.push({
+                    title: card.querySelector('.paper-title').textContent,
+                    authors: card.querySelector('.paper-authors')?.textContent || '',
+                    abstract: card.querySelector('.paper-abstract p')?.textContent || '',
+                    url: card.querySelector('.paper-link')?.href || ''
+                });
+            }
+        });
+
+        if (selectedPapersList.length === 0) {
+            alert('Please select at least one paper');
+            return;
+        }
+
+        const loadingIndicator = document.getElementById('loading-indicator-paper');
+        const errorMessage = document.getElementById('error-message-paper');
+        const paperContent = document.getElementById('paper-content');
+        
+        loadingIndicator.style.display = 'flex';
+        errorMessage.style.display = 'none';
+        
+        fetch('/add_selected_papers', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                papers: selectedPapersList,
+                section: section
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                loadingIndicator.style.display = 'none';
+                errorMessage.style.display = 'block';
+                errorMessage.textContent = data.error;
+            } else {
+                // Find or create section
+                let sectionElement = document.querySelector(`.section-${section.toLowerCase().replace(/\s+/g, '-')}`);
+                if (!sectionElement) {
+                    sectionElement = document.createElement('div');
+                    sectionElement.className = `section-${section.toLowerCase().replace(/\s+/g, '-')}`;
+                    const sectionTitle = document.createElement('h2');
+                    sectionTitle.textContent = section;
+                    sectionElement.appendChild(sectionTitle);
+                    paperContent.appendChild(sectionElement);
+                }
+                
+                // Add new content to section
+                const contentDiv = document.createElement('div');
+                contentDiv.innerHTML = data.content;
+                sectionElement.appendChild(contentDiv);
+                
+                // Add references if they exist
+                if (data.references) {
+                    const referencesContent = document.getElementById('references-content');
+                    data.references.forEach(ref => {
+                        const refItem = document.createElement('div');
+                        refItem.className = 'reference-item';
+                        refItem.textContent = ref;
+                        referencesContent.appendChild(refItem);
+                    });
+                }
+                
+                loadingIndicator.style.display = 'none';
+                // Clear selection after adding
+                document.getElementById('clear-selection').click();
+                // Show success message
+                alert('Papers added successfully!');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            loadingIndicator.style.display = 'none';
+            errorMessage.style.display = 'block';
+            errorMessage.textContent = 'An error occurred while adding the selected papers';
+        });
+    });
+    
+    // Paper controls
+    document.getElementById('edit-title').addEventListener('click', function() {
+        const title = prompt('Enter new paper title:', document.querySelector('.paper-title').textContent);
+        if (title) {
+            document.querySelector('.paper-title').textContent = title;
+        }
+    });
+    
+    document.getElementById('edit-authors').addEventListener('click', function() {
+        const name = prompt('Enter author name:', document.querySelector('.author-name').textContent);
+        const affiliation = prompt('Enter author affiliation:', document.querySelector('.author-affiliation').textContent);
+        if (name) document.querySelector('.author-name').textContent = name;
+        if (affiliation) document.querySelector('.author-affiliation').textContent = affiliation;
+    });
+    
+    document.getElementById('edit-abstract').addEventListener('click', function() {
+        const abstract = prompt('Enter paper abstract:', document.querySelector('.paper-abstract-content').textContent);
+        if (abstract) {
+            document.querySelector('.paper-abstract-content').textContent = abstract;
+        }
+    });
+    
+    document.getElementById('download-pdf').addEventListener('click', function() {
+        alert('PDF download functionality will be implemented soon!');
+    });
+    
+    // Show loading indicator on search
+    document.querySelector('.search-form').addEventListener('submit', function() {
+        document.getElementById('loading-indicator').style.display = 'block';
+    });
+
+    // Show more/less functionality for abstracts
+    document.querySelectorAll('.show-more').forEach(button => {
+        button.addEventListener('click', function() {
+            const abstract = this.parentElement;
+            abstract.classList.toggle('expanded');
+            this.textContent = abstract.classList.contains('expanded') ? 'Show less' : 'Show more';
+        });
+    });
+});
+</script>
+{% endblock %}

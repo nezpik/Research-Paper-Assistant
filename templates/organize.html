@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Organize Papers</h1>
+<form action="{{ url_for('organize') }}" method="post">
+    <label for="section">Section Name:</label>
+    <select name="section" required>
+        <option value="">Select a section</option>
+        {% for section in sections %}
+        <option value="{{ section }}">{{ section }}</option>
+        {% endfor %}
+    </select>
+    <ul>
+       {% for paper in papers %}
+       <li>
+           <input type="checkbox" name="paper_ids" value="{{ paper[0] }}"> {{ paper[1] }} (Current Section: {{ paper[2] }})
+       </li>
+       {% endfor %}
+    </ul>
+    <button type="submit">Assign to Section</button>
+</form>
+<p>Suggestions:</p>
+<ul>
+    <li><strong>Literature Review:</strong> Use this section to discuss existing research and theories related to your topic.</li>
+    <li><strong>Define:</strong> Use this section to define the problem you are trying to solve.</li>
+    <li><strong>Measure:</strong> Use this section to measure the problem.</li>
+    <li><strong>Analyse:</strong> Use this section to analyse the problem.</li>
+    <li><strong>Improve:</strong> Use this section to improve the problem.</li>
+    <li><strong>Control:</strong> Use this section to control the problem.</li>
+</ul>
+<a href="{{ url_for('index') }}">Back to Home</a>
+{% endblock %}
