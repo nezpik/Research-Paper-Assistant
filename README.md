@@ -90,6 +90,8 @@ A powerful research assistant that helps researchers organize and create profess
    DEEPSEEK_API_KEY=your-deepseek-api-key
    ```
 
+   **Important**: Never commit your `.env` file to version control. The `.env` file is listed in `.gitignore` to prevent accidental commits.
+
 6. **Initialize the Database**
    ```bash
    python init_db.py

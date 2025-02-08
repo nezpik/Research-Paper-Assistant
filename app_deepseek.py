@@ -1,28 +1,19 @@
 import os
 import sqlite3
 import requests
-from flask import Flask, render_template, request, redirect, url_for, g, jsonify, flash
+from flask import Flask, render_template, request, redirect, url_for, g, jsonify, flash, session
 import json
 import arxiv
 from datetime import datetime
 import logging
-from deepseek import DeepSeekAPI
+
+# Set up logging first
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'default-dev-key')  # Change this in production
 DATABASE = 'papers.db'
-
-# Initialize DeepSeek API
-DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY')
-
-if not DEEPSEEK_API_KEY:
-    logger.warning("DeepSeek API key not found in environment variables. Some features may not work.")
-
-deepseek_client = DeepSeekAPI()
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 def get_db():
     if 'db' not in g:
@@ -30,7 +21,8 @@ def get_db():
         g.db.row_factory = sqlite3.Row
     return g.db
 
-def close_db(e=None):
+@app.teardown_appcontext
+def close_db(error):
     db = g.pop('db', None)
     if db is not None:
         db.close()
@@ -39,186 +31,186 @@ def init_db():
     with app.app_context():
         db = get_db()
         with app.open_resource('schema.sql', mode='r') as f:
-            db.executescript(f.read().decode('utf8'))
+            db.cursor().executescript(f.read())
+        db.commit()
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-def generate_text(prompt, max_tokens=1000):
-    """Generate text using DeepSeek API"""
+def deepseek_generate(prompt):
     try:
-        response = deepseek_client.chat_completion(
-            prompt=prompt,
-            max_tokens=max_tokens,
-            temperature=0.7
-        )
-        return response
+        api_key = os.getenv('DEEPSEEK_API_KEY')
+        if not api_key:
+            logger.error("DEEPSEEK_API_KEY not found in environment variables")
+            return None
+
+        url = "https://api.deepseek.com/v1/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+        data = {
+            "model": "deepseek-chat",
+            "messages": [
+                {"role": "system", "content": "You are a research paper writing assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.7,
+            "max_tokens": 1000
+        }
+
+        response = requests.post(url, headers=headers, json=data)
+        response.raise_for_status()
+        result = response.json()
+        
+        if 'choices' in result and len(result['choices']) > 0:
+            return result['choices'][0]['message']['content']
+        else:
+            logger.error("Unexpected response format from DeepSeek API")
+            return None
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error calling DeepSeek API: {str(e)}")
+        return None
     except Exception as e:
-        logger.error(f"Error generating text with DeepSeek: {str(e)}")
+        logger.error(f"Error in deepseek_generate: {str(e)}")
         return None
 
-def create_section_prompt(section, methodology, paper_info):
-    """Create a prompt for generating section content"""
-    base_prompt = f"Write a {section} section for a research paper. "
-    
-    if section == "Literature Review":
-        base_prompt += "Analyze and synthesize the following papers, grouping them by themes and highlighting key findings: "
-    elif section == "Methodology":
-        base_prompt += f"Describe the following methodology: {methodology}. "
-    
-    base_prompt += "Here are the relevant papers:\n\n"
-    
-    for paper in paper_info:
-        base_prompt += f"Title: {paper['title']}\n"
-        base_prompt += f"Authors: {paper['authors']}\n"
-        base_prompt += f"Abstract: {paper['abstract']}\n\n"
-    
-    base_prompt += f"\nWrite a coherent {section} that incorporates these papers appropriately."
-    return base_prompt
-
-def generate_content(prompt):
-    """Generate content using DeepSeek API with proper formatting"""
-    try:
-        content = generate_text(prompt)
-        if content:
-            # Format the content with proper academic styling
-            formatted_content = content.replace('\n', '<br>')
-            return formatted_content
-        return "Error generating content. Please try again."
-    except Exception as e:
-        logger.error(f"Error in generate_content: {str(e)}")
-        return "Error generating content. Please try again."
-
-@app.route('/search', methods=['GET', 'POST'])
+@app.route('/search', methods=['GET'])
 def search():
-    if request.method == 'POST':
-        query = request.form.get('query', '')
-        if not query:
-            flash('Please enter a search query')
-            return redirect(url_for('index'))
+    query = request.args.get('query', '').strip()
+    logger.info(f"Search query received: '{query}'")
+    if not query:
+        flash('Please enter a search query')
+        return redirect(url_for('index'))
 
-        try:
-            # Search in database first
-            db = get_db()
-            cached_results = db.execute(
-                'SELECT * FROM papers WHERE query = ?',
-                (query,)
-            ).fetchall()
+    try:
+        # Search in database first
+        db = get_db()
+        cached_results = db.execute(
+            'SELECT * FROM papers WHERE query = ?',
+            (query,)
+        ).fetchall()
 
-            if cached_results:
-                results = []
-                for row in cached_results:
-                    results.append({
-                        'title': row['title'],
-                        'authors': row['authors'],
-                        'abstract': row['abstract'],
-                        'url': row['url']
-                    })
-                return jsonify({'results': results})
-
-            # If not in database, search arXiv
-            search = arxiv.Search(
-                query=query,
-                max_results=10,
-                sort_by=arxiv.SortCriterion.Relevance
-            )
-
+        if cached_results:
             results = []
-            for paper in search.results():
-                paper_data = {
-                    'title': paper.title,
-                    'authors': ', '.join([author.name for author in paper.authors]),
-                    'abstract': paper.summary,
-                    'url': paper.pdf_url
-                }
-                results.append(paper_data)
+            for row in cached_results:
+                results.append({
+                    'title': row['title'],
+                    'authors': row['authors'],
+                    'abstract': row['abstract'],
+                    'url': row['url']
+                })
+            return render_template('search_results.html', papers=results, query=query)
 
-                # Cache the results
-                try:
-                    db.execute('''
-                        INSERT INTO papers (title, authors, abstract, url, query, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    ''', (
-                        paper_data['title'],
-                        paper_data['authors'],
-                        paper_data['abstract'],
-                        paper_data['url'],
-                        query,
-                        datetime.now().isoformat()
-                    ))
-                except sqlite3.Error as e:
-                    logger.error(f"Database error while caching paper: {str(e)}")
+        # If not in database, search arXiv
+        search = arxiv.Search(
+            query=query,
+            max_results=10,
+            sort_by=arxiv.SortCriterion.Relevance
+        )
 
-            db.commit()
-            return jsonify({'results': results})
+        results = []
+        for paper in search.results():
+            paper_data = {
+                'title': paper.title,
+                'authors': ', '.join([author.name for author in paper.authors]),
+                'abstract': paper.summary,
+                'url': paper.pdf_url
+            }
+            results.append(paper_data)
 
-        except Exception as e:
-            logger.error(f"Error in search: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            # Cache the results
+            try:
+                db.execute('''
+                    INSERT INTO papers (title, authors, abstract, url, query, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (
+                    paper_data['title'],
+                    paper_data['authors'],
+                    paper_data['abstract'],
+                    paper_data['url'],
+                    query,
+                    datetime.now().isoformat()
+                ))
+            except sqlite3.Error as e:
+                logger.error(f"Database error while caching paper: {str(e)}")
 
-    return redirect(url_for('index'))
+        db.commit()
+        return render_template('search_results.html', papers=results, query=query)
+
+    except Exception as e:
+        logger.error(f"Error in search: {str(e)}")
+        flash(f"An error occurred: {str(e)}")
+        return redirect(url_for('index'))
 
 @app.route('/add_selected_papers', methods=['POST'])
 def add_selected_papers():
     try:
         data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No data received'}), 400
-            
-        selected_papers = data.get('papers', [])
-        section = data.get('section', '')
+        if not data or 'papers' not in data or 'section' not in data:
+            return jsonify({'success': False, 'error': 'Invalid request data'})
+
+        papers = data['papers']
+        section = data['section']
+
+        # Store selected papers in session
+        if 'selected_papers' not in session:
+            session['selected_papers'] = {}
         
-        if not selected_papers:
-            return jsonify({'error': 'No papers selected'}), 400
+        if section not in session['selected_papers']:
+            session['selected_papers'][section] = []
         
-        if not section:
-            return jsonify({'error': 'No section specified'}), 400
-        
-        # Generate content based on section type
-        content = generate_section_content(section, selected_papers)
-        
-        # Store papers in database with section
-        db = get_db()
-        references = []
-        for paper in selected_papers:
-            try:
-                db.execute('''
-                    INSERT OR REPLACE INTO papers 
-                    (title, authors, abstract, url, section, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (
-                    paper['title'],
-                    paper['authors'],
-                    paper['abstract'],
-                    paper['url'],
-                    section,
-                    datetime.now().isoformat()
-                ))
-                
-                # Generate reference in APA format
-                year = extract_year(paper['url']) or "n.d."
-                reference = format_reference(paper['title'], paper['authors'], year, paper['url'])
-                references.append(reference)
-                
-            except sqlite3.Error as e:
-                logger.error(f"Database error while adding paper: {str(e)}")
-                return jsonify({'error': f'Database error: {str(e)}'}), 500
-                
-        db.commit()
-        
-        return jsonify({
-            'success': True,
-            'content': content,
-            'references': references
-        })
-        
+        session['selected_papers'][section].extend(papers)
+        session.modified = True
+
+        return jsonify({'success': True})
     except Exception as e:
         logger.error(f"Error adding selected papers: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)})
 
-# Include all the helper functions from the original app.py
-# (generate_section_content, generate_literature_review, etc.)
+@app.route('/generate_section', methods=['POST'])
+def generate_section():
+    try:
+        data = request.get_json()
+        if not data or 'section' not in data:
+            return jsonify({'success': False, 'error': 'Invalid request data'})
+
+        section = data['section']
+        if 'selected_papers' not in session or section not in session['selected_papers']:
+            return jsonify({'success': False, 'error': 'No papers selected for this section'})
+
+        papers = session['selected_papers'][section]
+        
+        # Prepare the prompt for DeepSeek
+        prompt = f"Based on the following papers, generate a {section} section for a research paper. Make it comprehensive and well-structured:\n\n"
+        for paper in papers:
+            prompt += f"Title: {paper['title']}\n"
+            prompt += f"Authors: {paper['authors']}\n"
+            prompt += f"Abstract: {paper['abstract']}\n\n"
+
+        # Call DeepSeek API to generate the section
+        generated_text = deepseek_generate(prompt)
+        
+        if generated_text is None:
+            return jsonify({'success': False, 'error': 'Failed to generate text'})
+
+        # Store the generated text in the session
+        if 'generated_sections' not in session:
+            session['generated_sections'] = {}
+        session['generated_sections'][section] = generated_text
+        session.modified = True
+
+        return jsonify({
+            'success': True, 
+            'generated_text': generated_text,
+            'message': f'{section} section generated successfully'
+        })
+
+    except Exception as e:
+        logger.error(f"Error generating section: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
     init_db()

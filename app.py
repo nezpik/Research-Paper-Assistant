@@ -8,10 +8,13 @@ from datetime import datetime
 import logging
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-123'  # Add this line for flash messages
+app.secret_key = os.environ.get('SECRET_KEY', 'default-dev-key')  # Change this in production
 DATABASE = 'papers.db'
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', "AIzaSyB-kbXJJ-HDW2jmqNBBz0JRo9nM6qRfbNs")
-GEMINI_API_KEY_2 = os.environ.get('GEMINI_API_KEY_2', "AIzaSyC_6ToOp1Q6cEwwrJIhQnTOYmt33FgWITU")
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+GEMINI_API_KEY_2 = os.environ.get('GEMINI_API_KEY_2')
+
+if not GEMINI_API_KEY or not GEMINI_API_KEY_2:
+    logger.warning("API keys not found in environment variables. Some features may not work.")
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

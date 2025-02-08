@@ -31,6 +31,8 @@ ENV/
 
 # Environment Variables
 .env
+.env.local
+.env.*
 
 # IDE specific files
 .idea/

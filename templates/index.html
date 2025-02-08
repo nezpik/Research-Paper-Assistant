@@ -18,23 +18,14 @@
         <form method="GET" action="{{ url_for('search') }}" class="search-form">
             <div class="search-container">
                 <div class="input-group">
-                    <input type="text" 
-                           name="query" 
-                           placeholder="Search for papers..." 
-                           value="{{ request.args.get('query', '') }}" 
-                           required
-                           class="search-input">
-                    <select name="source" class="source-select">
-                        <option value="all" {% if request.args.get('source') == 'all' %}selected{% endif %}>All Sources</option>
-                        <option value="arxiv" {% if request.args.get('source') == 'arxiv' %}selected{% endif %}>arXiv</option>
-                    </select>
+                    <input type="text" name="query" placeholder="Search for papers..." required class="search-input">
                     <button type="submit" class="search-button">Search</button>
                 </div>
             </div>
         </form>
     </div>
 
-    <div id="loading-indicator" class="loading-indicator">
+    <div id="loading-indicator" class="loading-indicator" style="display: none;">
         <div class="spinner"></div>
         <span>Searching...</span>
     </div>
@@ -333,7 +324,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Show loading indicator on search
     document.querySelector('.search-form').addEventListener('submit', function() {
-        document.getElementById('loading-indicator').style.display = 'block';
+        document.getElementById('loading-indicator').style.display = 'flex';
     });
 
     // Show more/less functionality for abstracts

@@ -1,19 +1,275 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Search Results for "{{ query }}"</h1>
-<ul>
-  {% for result in results %}
-  <li>
-    <strong>{{ result.title }}</strong> - <a href="{{ result.link }}" target="_blank">{{ result.link }}</a><br>
-    Source: {{ result.source }}<br>
-    <form action="{{ url_for('add_paper') }}" method="post" style="display:inline;">
-      <input type="hidden" name="title" value="{{ result.title }}">
-      <input type="hidden" name="link" value="{{ result.link }}">
-      <input type="hidden" name="source" value="{{ result.source }}">
-      <button type="submit">Add Paper</button>
-    </form>
-  </li>
-  {% endfor %}
-</ul>
-<a href="{{ url_for('index') }}">Back to Home</a>
+<div class="main-container">
+    <div class="search-section">
+        <h1>Search Results for "{{ query }}"</h1>
+        <form method="GET" action="{{ url_for('search') }}" class="search-form">
+            <div class="search-container">
+                <div class="input-group">
+                    <input type="text" name="query" placeholder="Search for papers..." value="{{ query }}" required class="search-input">
+                    <button type="submit" class="search-button">Search</button>
+                </div>
+            </div>
+        </form>
+        <a href="{{ url_for('index') }}" class="back-button">Back to Home</a>
+    </div>
+
+    <div id="loading-indicator" class="loading-indicator" style="display: none;">
+        <div class="spinner"></div>
+        <span>Searching...</span>
+    </div>
+
+    {% if papers %}
+    <div class="selection-panel">
+        <h3>Add Papers to Research Section</h3>
+        <div class="selection-controls">
+            <select id="section-select" class="section-select">
+                <option value="">Select Section</option>
+                <option value="Introduction">Introduction</option>
+                <option value="Literature Review">Literature Review</option>
+                <option value="Methodology">Methodology</option>
+                <option value="Results">Results</option>
+                <option value="Discussion">Discussion</option>
+                <option value="Conclusion">Conclusion</option>
+            </select>
+            <button id="add-selected" class="add-button" disabled>Add Selected Papers</button>
+            <button id="generate-section" class="generate-button" style="display: none;">Generate Section</button>
+        </div>
+    </div>
+
+    <div class="results-section">
+        <div class="papers-list">
+            {% for paper in papers %}
+            <div class="paper-card">
+                <div class="paper-checkbox">
+                    <label class="checkbox-label">
+                        <input type="checkbox" class="paper-select" data-paper-id="{{ loop.index }}"
+                               data-paper-title="{{ paper.title }}"
+                               data-paper-authors="{{ paper.authors }}"
+                               data-paper-abstract="{{ paper.abstract }}"
+                               data-paper-url="{{ paper.url }}">
+                        <span class="checkbox-custom"></span>
+                    </label>
+                </div>
+                <div class="paper-content">
+                    <h3 class="paper-title">{{ paper.title }}</h3>
+                    <p class="paper-authors">{{ paper.authors }}</p>
+                    <p class="paper-abstract">{{ paper.abstract }}</p>
+                    <div class="paper-links">
+                        <a href="{{ paper.url }}" target="_blank" class="paper-link">View Paper</a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <div class="no-results">
+        <p>No papers found. Try a different search query.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selectedPapers = new Set();
+    const checkboxes = document.querySelectorAll('.paper-select');
+    const addButton = document.getElementById('add-selected');
+    const generateButton = document.getElementById('generate-section');
+    const sectionSelect = document.getElementById('section-select');
+
+    function updateAddButtonState() {
+        const hasSelection = selectedPapers.size > 0;
+        const hasSection = sectionSelect.value !== '';
+        addButton.disabled = !hasSelection || !hasSection;
+        addButton.title = !hasSelection ? 'Select papers first' : 
+                         !hasSection ? 'Select a section first' : 
+                         'Add selected papers to section';
+    }
+
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                selectedPapers.add(this.dataset.paperId);
+            } else {
+                selectedPapers.delete(this.dataset.paperId);
+            }
+            updateAddButtonState();
+        });
+    });
+
+    sectionSelect.addEventListener('change', updateAddButtonState);
+
+    addButton.addEventListener('click', function() {
+        const selectedPapersData = [];
+        selectedPapers.forEach(paperId => {
+            const checkbox = document.querySelector(`[data-paper-id="${paperId}"]`);
+            selectedPapersData.push({
+                title: checkbox.dataset.paperTitle,
+                authors: checkbox.dataset.paperAuthors,
+                abstract: checkbox.dataset.paperAbstract,
+                url: checkbox.dataset.paperUrl
+            });
+        });
+
+        fetch('/add_selected_papers', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                papers: selectedPapersData,
+                section: sectionSelect.value
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Papers added successfully!');
+                generateButton.style.display = 'inline-block';
+                // Clear selections
+                checkboxes.forEach(cb => cb.checked = false);
+                selectedPapers.clear();
+                updateAddButtonState();
+            } else {
+                alert('Error adding papers: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error adding papers. Please try again.');
+        });
+    });
+
+    generateButton.addEventListener('click', function() {
+        const section = sectionSelect.value;
+        if (!section) {
+            alert('Please select a section first');
+            return;
+        }
+
+        generateButton.disabled = true;
+        generateButton.textContent = 'Generating...';
+
+        fetch('/generate_section', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                section: section
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            generateButton.disabled = false;
+            generateButton.textContent = 'Generate Section';
+
+            if (data.success) {
+                const modal = document.createElement('div');
+                modal.className = 'modal';
+                modal.innerHTML = `
+                    <div class="modal-content">
+                        <h2>${section}</h2>
+                        <div class="generated-text">${data.generated_text.replace(/\n/g, '<br>')}</div>
+                        <div class="modal-buttons">
+                            <button class="close-button">Close</button>
+                            <button class="save-button">Save to Research Paper</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+
+                modal.querySelector('.close-button').addEventListener('click', () => {
+                    modal.remove();
+                });
+
+                modal.querySelector('.save-button').addEventListener('click', () => {
+                    // Here you would add logic to save the generated text to your research paper
+                    alert('Text saved to research paper!');
+                    modal.remove();
+                    window.location.href = '/';
+                });
+            } else {
+                alert('Error generating section: ' + data.error);
+            }
+        })
+        .catch(error => {
+            generateButton.disabled = false;
+            generateButton.textContent = 'Generate Section';
+            console.error('Error:', error);
+            alert('Error generating section. Please try again.');
+        });
+    });
+
+    document.querySelector('.search-form').addEventListener('submit', function() {
+        document.getElementById('loading-indicator').style.display = 'flex';
+    });
+});
+</script>
+
+<style>
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 30px;
+    border-radius: 8px;
+    max-width: 800px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    color: #2c3e50;
+}
+
+.generated-text {
+    margin: 20px 0;
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+
+.modal-buttons button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.close-button {
+    background-color: #e0e0e0;
+}
+
+.save-button {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.save-button:hover {
+    background-color: #45a049;
+}
+</style>
+
 {% endblock %}
