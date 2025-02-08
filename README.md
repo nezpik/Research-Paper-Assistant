@@ -1,6 +1,6 @@
-# Research Paper Assistant
+# Pistology-RA0
 
-A powerful web application that helps researchers organize and create professional research papers. This tool assists in searching academic papers, generating literature reviews, and organizing research content in a structured format.
+A powerful research assistant that helps researchers organize and create professional research papers. This tool assists in searching academic papers, generating literature reviews, and organizing research content in a structured format.
 
 ## Features
 
@@ -31,8 +31,8 @@ A powerful web application that helps researchers organize and create profession
 
 1. **Clone the Repository**
    ```bash
-   git clone https://github.com/nezpik/Research-Paper-Assistant.git
-   cd Research-Paper-Assistant
+   git clone https://github.com/nezpik/Pistology-RA0.git
+   cd Pistology-RA0
    ```
 
 2. **Create a Virtual Environment**
