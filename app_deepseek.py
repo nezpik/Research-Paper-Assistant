@@ -174,11 +174,15 @@ def add_selected_papers():
 def generate_section():
     try:
         data = request.get_json()
+        logger.info(f"Received generate_section request with data: {data}")
+        
         if not data or 'section' not in data:
+            logger.error("Invalid request data: missing section")
             return jsonify({'success': False, 'error': 'Invalid request data'})
 
         section = data['section']
         if 'selected_papers' not in session or section not in session['selected_papers']:
+            logger.error(f"No papers selected for section '{section}'")
             return jsonify({'success': False, 'error': 'No papers selected for this section'})
 
         papers = session['selected_papers'][section]
@@ -194,6 +198,7 @@ def generate_section():
         generated_text = deepseek_generate(prompt)
         
         if generated_text is None:
+            logger.error(f"Failed to generate section '{section}'")
             return jsonify({'success': False, 'error': 'Failed to generate text'})
 
         # Store the generated text in the session
@@ -201,6 +206,7 @@ def generate_section():
             session['generated_sections'] = {}
         session['generated_sections'][section] = generated_text
         session.modified = True
+        logger.info(f"Generated section '{section}' and stored in session")
 
         return jsonify({
             'success': True, 
@@ -212,9 +218,65 @@ def generate_section():
         logger.error(f"Error generating section: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/save_section', methods=['POST'])
+def save_section():
+    try:
+        data = request.get_json()
+        logger.info(f"Received save_section request with data: {data}")
+        
+        if not data or 'section' not in data or 'content' not in data:
+            logger.error("Invalid request data: missing section or content")
+            return jsonify({'success': False, 'error': 'Invalid request data'})
+
+        section = data['section']
+        content = data['content']
+        logger.info(f"Saving section '{section}' with content length: {len(content)}")
+
+        # Store in database
+        db = get_db()
+        db.execute('''
+            INSERT OR REPLACE INTO sections (name, content, updated_at)
+            VALUES (?, ?, ?)
+        ''', (section, content, datetime.now().isoformat()))
+        db.commit()
+        logger.info(f"Successfully saved section '{section}' to database")
+
+        # Verify the save
+        saved = db.execute('SELECT * FROM sections WHERE name = ?', (section,)).fetchone()
+        if saved:
+            logger.info(f"Verified section '{section}' was saved with content length: {len(saved['content'])}")
+        else:
+            logger.error(f"Failed to verify section '{section}' was saved")
+
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Error saving section: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/get_sections', methods=['GET'])
+def get_sections():
+    try:
+        logger.info("Fetching all sections")
+        db = get_db()
+        sections = db.execute('SELECT name, content FROM sections ORDER BY name').fetchall()
+        result = [{'name': row['name'], 'content': row['content']} for row in sections]
+        logger.info(f"Found {len(result)} sections")
+        
+        for section in result:
+            logger.info(f"Section '{section['name']}' has content length: {len(section['content'])}")
+        
+        return jsonify({
+            'success': True,
+            'sections': result
+        })
+    except Exception as e:
+        logger.error(f"Error getting sections: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
+
 if __name__ == '__main__':
-    init_db()
-    # Use environment variables for configuration
+    if os.environ.get('INIT_DB', 'false').lower() == 'true':
+        init_db()
+        print('Database initialized')
     debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     host = os.environ.get('FLASK_HOST', '0.0.0.0')
     port = int(os.environ.get('FLASK_PORT', 5000))

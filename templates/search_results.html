@@ -185,10 +185,41 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
 
                 modal.querySelector('.save-button').addEventListener('click', () => {
-                    // Here you would add logic to save the generated text to your research paper
-                    alert('Text saved to research paper!');
-                    modal.remove();
-                    window.location.href = '/';
+                    const saveButton = modal.querySelector('.save-button');
+                    saveButton.disabled = true;
+                    saveButton.textContent = 'Saving...';
+
+                    fetch('/save_section', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            section: section,
+                            content: data.generated_text
+                        })
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(saveData => {
+                        if (saveData.success) {
+                            alert('Section saved successfully!');
+                            modal.remove();
+                            window.location.href = '/';
+                        } else {
+                            throw new Error(saveData.error || 'Failed to save section');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error saving section:', error);
+                        alert('Error saving section: ' + error.message);
+                        saveButton.disabled = false;
+                        saveButton.textContent = 'Save to Research Paper';
+                    });
                 });
             } else {
                 alert('Error generating section: ' + data.error);
