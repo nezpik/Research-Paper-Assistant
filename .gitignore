@@ -1,3 +1,8 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
 # Python
 __pycache__/
 *.py[cod]
@@ -16,7 +21,6 @@ lib64/
 parts/
 sdist/
 var/
-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -29,17 +33,15 @@ ENV/
 *.db
 *.sqlite3
 
-# Environment Variables
-.env
-.env.local
-.env.*
-
-# IDE specific files
+# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+
+# OS
 .DS_Store
+Thumbs.db
 
 # Logs
 *.log
